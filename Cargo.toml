@@ -2,10 +2,10 @@
 name = "multi_mut"
 version = "0.1.0"
 authors = ["Pyry Kontio <pyry.kontio@drasa.eu>"]
-description = "Safe extension methods for HashMap that help getting multiple mutable references to the values contained in it."
+description = "Extension methods that provide a safe API for HashMap that helps getting multiple mutable references to the values contained in it."
 license = "MIT"
-repository = "https://github.com/golddranks/binary_macros"
+repository = "https://github.com/golddranks/multi_mut"
 readme = "README.md"
-keywords = ["base64", "hex", "binary", "encoding", "decoding"]
+keywords = ["hashmap", "mutability", "extension"]
 
 [dependencies]

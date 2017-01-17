@@ -194,9 +194,8 @@ impl<'a, Q: ?Sized, K, V> Iterator for MultiMutIter<'a, Q, K, V>
     fn next(&mut self) -> Option<Self::Item> {
         if self.mut_wrapper.used == self.mut_wrapper.buffer.len() { return None };
         match self.keys.next() {
-            Some(q) => {
-                self.mut_wrapper.get_mut(q)
-            },
+            Some(q) => { Some(self.mut_wrapper.mut_ref(q)) },   // Why use panicking mut_ref? Since we provide the keys up front with iterator,
+                                                                // it's likely that a non-existant key is a bug.
             None => None,
         }
         
