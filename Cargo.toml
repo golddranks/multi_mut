@@ -1,8 +1,8 @@
 [package]
 name = "multi_mut"
-version = "0.1.0"
+version = "0.1.3"
 authors = ["Pyry Kontio <pyry.kontio@drasa.eu>"]
-description = "Extension methods that provide a safe API for HashMap that helps getting multiple mutable references to the values contained in it."
+description = "Methods on HashMap and BTreeMap for safely getting multiple mutable references to the contained values."
 license = "MIT"
 repository = "https://github.com/golddranks/multi_mut"
 readme = "README.md"
