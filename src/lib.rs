@@ -154,19 +154,25 @@ impl<'a, K, V> HashMapMutWrapper<'a, K, V>
         if self.used == self.buffer.len() {
             panic!("Buffer space is depleted!");
         }
-        let v = if let Some(v) = self.map.get(k) { v } else { return None };    // Note: should we be worried about aliased reads happening in get()?
-                                                                                // after all, there might exist a &mut ref to the value at this point.
-                                                                                // However, get() doesn't probably read through &V, it accesses only &K.
-        let ptr = v as *const V;
-        for old_ptr in &self.buffer[0..self.used] {
-            if ptr == *old_ptr {
-                panic!("No aliased references allowed! This key has been already used.");
+        unsafe {    // We introduce the unsafe block early, because we want to be extra safe.
+                    // We create a reference &V here, but there may already exist an earlier
+                    // reference &mut V. This should be fine, since we never access &V through
+                    // this reference before it has proven to be unique. However, in case the 
+                    // compiler jumps to conclusions based of mere *existence* of &V, we want
+                    // to have it exist only inside an unsafe block, to signal that the type
+                    // system invariants may be temporarily broken.
+            let v = if let Some(v) = self.map.get(k) { v } else { return None };
+            let ptr = v as *const V;
+            for old_ptr in &self.buffer[0..self.used] {
+                if ptr == *old_ptr {
+                    panic!("No aliased references allowed! This key has been already used.");
+                }
             }
+            self.buffer[self.used] = ptr;
+            self.used += 1;
+    
+            Some(transmute(v))
         }
-        self.buffer[self.used] = ptr;
-        self.used += 1;
-
-        Some(unsafe{ transmute(v) })
     }
 
     pub fn mut_ref<Q: ?Sized>(&mut self, k: &Q) -> &'a mut V
@@ -350,19 +356,25 @@ impl<'a, K, V> BTreeMapMutWrapper<'a, K, V>
         if self.used == self.buffer.len() {
             panic!("Buffer space is depleted!");
         }
-        let v = if let Some(v) = self.map.get(k) { v } else { return None };    // Note: should we be worried about aliased reads happening in get()?
-                                                                                // after all, there might exist a &mut ref to the value at this point.
-                                                                                // However, get() doesn't probably read through &V, it accesses only &K.
-        let ptr = v as *const V;
-        for old_ptr in &self.buffer[0..self.used] {
-            if ptr == *old_ptr {
-                panic!("No aliased references allowed! This key has been already used.");
+        unsafe {    // We introduce the unsafe block early, because we want to be extra safe.
+                    // We create a reference &V here, but there may already exist an earlier
+                    // reference &mut V. This should be fine, since we never access &V through
+                    // this reference before it has proven to be unique. However, in case the 
+                    // compiler jumps to conclusions based of mere *existence* of &V, we want
+                    // to have it exist only inside an unsafe block, to signal that the type
+                    // system invariants may be temporarily broken.
+            let v = if let Some(v) = self.map.get(k) { v } else { return None };
+            let ptr = v as *const V;
+            for old_ptr in &self.buffer[0..self.used] {
+                if ptr == *old_ptr {
+                    panic!("No aliased references allowed! This key has been already used.");
+                }
             }
+            self.buffer[self.used] = ptr;
+            self.used += 1;
+    
+            Some(transmute(v))
         }
-        self.buffer[self.used] = ptr;
-        self.used += 1;
-
-        Some(unsafe{ transmute(v) })
     }
 
     pub fn mut_ref<Q: ?Sized>(&mut self, k: &Q) -> &'a mut V

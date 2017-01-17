@@ -3,6 +3,24 @@
 A bunch of extension methods on `HashMap` and `BTreeMap` that provide a safe API for getting multiple mutable references to values contained in them.
 Runtime checks are done to prevent mutable aliasing.
 
+### Disclaimer
+
+This crate performs some black magic behind the curtains (mutable transmutes). Whether this is safe to do or not depends on the Rust memory model, and
+the particulars of that are not set in stone yet. **No mutable access is ever done through aliasing references and the uniqueness of the references is checked
+before transmuting `&V` to `&mut V`.**
+
+However the critical thing this crate depends on is: is it UB for `&V` and `&mut V` that point to the same value of type `V` to
+*exist* momentarily? When trying to get a new mutable reference to a value inside `HashMap`, there may already exist a `&mut V` "in the wild", returned by the 
+same getter method earlier. Inside an `unsafe` block, a `&V` is created and it's then checked against already existing references. If no earlier reference exists,
+`&V` is transmuted to `&mut V`. This means that there is a moment where `&V` and `&mut V` may exist simultaneously.
+
+Note that this happens inside an `unsafe` block, and there is some debate about to which degree the compiler should expect the type system invariants to hold
+inside `unsafe` blocks (and even inside functions or modules that contain `unsafe` blocks.) On the other hand, there is also debate whether mere *existence* of mutable
+aliasable references is UB, or is it accessing the value *through* them that is UB.
+I'm not doing access through them, and I'm doing all the transmute trickery inside an `unsafe` block,
+so I claim the black magic that happens in this crate to be on the conservative side. Nevertheless, be careful! This seems to work – and I don't see why it shouldn't –
+as of Jan 2017, but as I said, the memory model is still evolving, and **I will take no responsibility of undefined behaviour possibly caused by this crate.**
+
 ## How to use
 
 Add to Cargo.toml::
