@@ -6,9 +6,6 @@ use std::collections::BTreeMap;
 use std::mem::transmute;
 use std::slice::Iter;
 
-fn ref_eq<'a, 'b, T>(thing: &'a T, other: &'b T) -> bool {
-    (thing as *const T) == (other as *const T)
-}
 
 /// Endows HashMap with extension methods that help getting multiple mutable references to the values contained in it.
 /// Runtime-checking is done to ensure that this is safe: the returned mutable references are guaranteed not to alias.
@@ -28,9 +25,9 @@ pub trait HashMapMultiMut {
     fn triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> (&mut Self::Value, &mut Self::Value, &mut Self::Value)
         where Self::Key: Borrow<Q>, Q: Hash + Eq;
 
-    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*const Self::Value]) -> HashMapMutWrapper<Self::Key, Self::Value>;
+    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*mut Self::Value]) -> HashMapMutWrapper<Self::Key, Self::Value>;
 
-    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, k: &'a [&'a Q], buffer: &'a mut [*const Self::Value]) -> HashMapMultiMutIter<Q, Self::Key, Self::Value>
+    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, k: &'a [&'a Q], buffer: &'a mut [*mut Self::Value]) -> HashMapMultiMutIter<Q, Self::Key, Self::Value>
         where Self::Key: Borrow<Q>, Q: Hash + Eq;
 }
 
@@ -38,47 +35,47 @@ impl<K: Hash + Eq, V> HashMapMultiMut for HashMap<K, V> {
     type Value = V;
     type Key = K;
 
-    #[allow(mutable_transmutes)]
     fn get_pair_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q) -> Option<(&mut V, &mut V)>
         where K: Borrow<Q>, Q: Hash + Eq
     {
-
         let v_1 = self.get(k_1);
         let v_2 = self.get(k_2);
 
         match (v_1, v_2) {
             (Some(v_1), Some(v_2)) => {
-                if ref_eq(v_1, v_2) {
+
+                let ptr_1 = v_1 as *const V as *mut V;
+                let ptr_2 = v_2 as *const V as *mut V;
+
+                if ptr_1 == ptr_2 {
                     None
                 } else {
-                    unsafe { Some((transmute(v_1), transmute(v_2))) }   // This is safe to do because we checked that v_1 and v_2 don't alias,
-                                                                        // and this function consumed a &mut self, which locks the HashMap so that
-                                                                        // no further aliasing references will be created during the lifetime of these
-                                                                        // references.
+                    unsafe { Some((transmute(ptr_1), transmute(ptr_2))) }   // This is safe to do because we checked that ptr_1 and ptr_2 don't alias,
+                                                                            // and this function consumed a &mut self, which locks the HashMap so that
+                                                                            // no further aliasing references will be created during the lifetime of these
+                                                                            // references.
                 }
             },
             _ => None,
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn pair_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q) -> (&mut V, &mut V)
         where K: Borrow<Q>, Q: Hash + Eq
     {
+        let ptr_1 = &self[k_1] as *const V as *mut V;
+        let ptr_2 = &self[k_2] as *const V as *mut V;
 
-        let v_1 = &self[k_1];
-        let v_2 = &self[k_2];
-        if ref_eq(v_1, v_2) {
+        if ptr_1 == ptr_2 {
             panic!("The keys pointed to the same value! Only non-overlapping values can be handled.")
         } else {
-            unsafe { (transmute(v_1), transmute(v_2)) } // This is safe to do because we checked that v_1 and v_2 don't alias,
-                                                        // and this function consumed a &mut self, which locks the HashMap so that
-                                                        // no further aliasing references will be created during the lifetime of these
-                                                        // references.
+            unsafe { (transmute(ptr_1), transmute(ptr_2)) } // This is safe to do because we checked that ptr_1 and ptr_2 don't alias,
+                                                            // and this function consumed a &mut self, which locks the HashMap so that
+                                                            // no further aliasing references will be created during the lifetime of these
+                                                            // references.
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn get_triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> Option<(&mut V, &mut V, &mut V)>
         where K: Borrow<Q>, Q: Hash + Eq
     {
@@ -89,11 +86,16 @@ impl<K: Hash + Eq, V> HashMapMultiMut for HashMap<K, V> {
 
         match (v_1, v_2, v_3) {
             (Some(v_1), Some(v_2), Some(v_3)) => {
-                if ref_eq(v_1, v_2) || ref_eq(v_2, v_3) || ref_eq(v_1, v_3) {
+
+                let ptr_1 = v_1 as *const V as *mut V;
+                let ptr_2 = v_2 as *const V as *mut V;
+                let ptr_3 = v_3 as *const V as *mut V;
+
+                if ptr_1 == ptr_2 || ptr_2 == ptr_3 || ptr_1 == ptr_3 {
                     None
                 } else {
-                    unsafe { Some((transmute(v_1), transmute(v_2), transmute(v_3))) } 
-                        // This is safe to do because we checked that v_1, v_2 and v_3 don't alias,
+                    unsafe { Some((transmute(ptr_1), transmute(ptr_2), transmute(ptr_3))) } 
+                        // This is safe to do because we checked that ptr_1, ptr_2 and ptr_3 don't alias,
                         // and this function consumed a &mut self, which locks the HashMap so that
                         // no further aliasing references will be created during the lifetime of these
                         // references.
@@ -103,31 +105,30 @@ impl<K: Hash + Eq, V> HashMapMultiMut for HashMap<K, V> {
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> (&mut V, &mut V, &mut V)
         where K: Borrow<Q>, Q: Hash + Eq
     {
+        let ptr_1 = &self[k_1] as *const V as *mut V;
+        let ptr_2 = &self[k_2] as *const V as *mut V;
+        let ptr_3 = &self[k_3] as *const V as *mut V;
 
-        let v_1 = &self[k_1];
-        let v_2 = &self[k_2];
-        let v_3 = &self[k_3];
-        if ref_eq(v_1, v_2) || ref_eq(v_2, v_3) || ref_eq(v_1, v_3) {
+        if ptr_1 == ptr_2 || ptr_2 == ptr_3 || ptr_1 == ptr_3 {
             panic!("The keys pointed to the same value! Only non-overlapping values can be handled.")
         } else {
-            unsafe { (transmute(v_1), transmute(v_2), transmute(v_3)) }
-                // This is safe to do because we checked that v_1, v_2 and v_3 don't alias,
+            unsafe { (transmute(ptr_1), transmute(ptr_2), transmute(ptr_3)) }
+                // This is safe to do because we checked that ptr_1, ptr_2 and ptr_3 don't alias,
                 // and this function consumed a &mut self, which locks the HashMap so that
                 // no further aliasing references will be created during the lifetime of these
                 // references.
         }
     }
 
-    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*const V]) -> HashMapMutWrapper<K, V>
+    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*mut V]) -> HashMapMutWrapper<K, V>
     {
         HashMapMutWrapper { used: 0, map: self, buffer: buffer }
     }
 
-    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, keys: &'a [&'a Q], buffer: &'a mut [*const V]) -> HashMapMultiMutIter<Q, K, V>
+    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, keys: &'a [&'a Q], buffer: &'a mut [*mut V]) -> HashMapMultiMutIter<Q, K, V>
         where K: Borrow<Q>, Q: Hash + Eq
     {
         HashMapMultiMutIter { mut_wrapper: self.multi_mut(buffer), keys: keys.into_iter() }
@@ -140,14 +141,13 @@ pub struct HashMapMutWrapper<'a, K: 'a, V: 'a>
 {
     used: usize,
     map: &'a mut HashMap<K, V>,
-    buffer: &'a mut [*const V],
+    buffer: &'a mut [*mut V],
 }
 
 impl<'a, K, V> HashMapMutWrapper<'a, K, V>
         where K: Hash + Eq
 {
 
-    #[allow(mutable_transmutes)]
     pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&'a mut V>
         where K: Borrow<Q>, Q: Hash + Eq
     {
@@ -161,8 +161,8 @@ impl<'a, K, V> HashMapMutWrapper<'a, K, V>
                     // compiler jumps to conclusions based of mere *existence* of &V, we want
                     // to have it exist only inside an unsafe block, to signal that the type
                     // system invariants may be temporarily broken.
-            let v = if let Some(v) = self.map.get(k) { v } else { return None };
-            let ptr = v as *const V;
+            let ptr = if let Some(v) = self.map.get(k) { v as *const V as *mut V } else { return None };
+
             for old_ptr in &self.buffer[0..self.used] {
                 if ptr == *old_ptr {
                     panic!("No aliased references allowed! This key has been already used.");
@@ -171,7 +171,7 @@ impl<'a, K, V> HashMapMutWrapper<'a, K, V>
             self.buffer[self.used] = ptr;
             self.used += 1;
     
-            Some(transmute(v))
+            Some(transmute(ptr))
         }
     }
 
@@ -196,7 +196,6 @@ impl<'a, Q: ?Sized, K, V> Iterator for HashMapMultiMutIter<'a, Q, K, V>
 {
     type Item = &'a mut V;
 
-    #[allow(mutable_transmutes)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.mut_wrapper.used == self.mut_wrapper.buffer.len() { return None };
         match self.keys.next() {
@@ -229,9 +228,9 @@ pub trait BTreeMapMultiMut {
     fn triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> (&mut Self::Value, &mut Self::Value, &mut Self::Value)
         where Self::Key: Borrow<Q>, Q: Ord;
 
-    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*const Self::Value]) -> BTreeMapMutWrapper<Self::Key, Self::Value>;
+    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*mut Self::Value]) -> BTreeMapMutWrapper<Self::Key, Self::Value>;
 
-    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, k: &'a [&'a Q], buffer: &'a mut [*const Self::Value]) -> BTreeMapMultiMutIter<Q, Self::Key, Self::Value>
+    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, k: &'a [&'a Q], buffer: &'a mut [*mut Self::Value]) -> BTreeMapMultiMutIter<Q, Self::Key, Self::Value>
         where Self::Key: Borrow<Q>, Q: Ord;
 }
 
@@ -240,47 +239,47 @@ impl<K: Ord, V> BTreeMapMultiMut for BTreeMap<K, V> {
     type Value = V;
     type Key = K;
 
-    #[allow(mutable_transmutes)]
     fn get_pair_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q) -> Option<(&mut V, &mut V)>
         where K: Borrow<Q>, Q: Ord
     {
-
         let v_1 = self.get(k_1);
         let v_2 = self.get(k_2);
 
         match (v_1, v_2) {
             (Some(v_1), Some(v_2)) => {
-                if ref_eq(v_1, v_2) {
+
+                let ptr_1 = v_1 as *const V as *mut V;
+                let ptr_2 = v_2 as *const V as *mut V;
+
+                if ptr_1 == ptr_2 {
                     None
                 } else {
-                    unsafe { Some((transmute(v_1), transmute(v_2))) }   // This is safe to do because we checked that v_1 and v_2 don't alias,
-                                                                        // and this function consumed a &mut self, which locks the HashMap so that
-                                                                        // no further aliasing references will be created during the lifetime of these
-                                                                        // references.
+                    unsafe { Some((transmute(ptr_1), transmute(ptr_2))) }   // This is safe to do because we checked that ptr_1 and ptr_2 don't alias,
+                                                                            // and this function consumed a &mut self, which locks the HashMap so that
+                                                                            // no further aliasing references will be created during the lifetime of these
+                                                                            // references.
                 }
             },
             _ => None,
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn pair_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q) -> (&mut V, &mut V)
         where K: Borrow<Q>, Q: Ord
     {
+        let ptr_1 = &self[k_1] as *const V as *mut V;
+        let ptr_2 = &self[k_2] as *const V as *mut V;
 
-        let v_1 = &self[k_1];
-        let v_2 = &self[k_2];
-        if ref_eq(v_1, v_2) {
+        if ptr_1 == ptr_2 {
             panic!("The keys pointed to the same value! Only non-overlapping values can be handled.")
         } else {
-            unsafe { (transmute(v_1), transmute(v_2)) } // This is safe to do because we checked that v_1 and v_2 don't alias,
-                                                        // and this function consumed a &mut self, which locks the HashMap so that
-                                                        // no further aliasing references will be created during the lifetime of these
-                                                        // references.
+            unsafe { (transmute(ptr_1), transmute(ptr_2)) } // This is safe to do because we checked that ptr_1 and ptr_2 don't alias,
+                                                            // and this function consumed a &mut self, which locks the HashMap so that
+                                                            // no further aliasing references will be created during the lifetime of these
+                                                            // references.
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn get_triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> Option<(&mut V, &mut V, &mut V)>
         where K: Borrow<Q>, Q: Ord
     {
@@ -291,11 +290,16 @@ impl<K: Ord, V> BTreeMapMultiMut for BTreeMap<K, V> {
 
         match (v_1, v_2, v_3) {
             (Some(v_1), Some(v_2), Some(v_3)) => {
-                if ref_eq(v_1, v_2) || ref_eq(v_2, v_3) || ref_eq(v_1, v_3) {
+
+                let ptr_1 = v_1 as *const V as *mut V;
+                let ptr_2 = v_2 as *const V as *mut V;
+                let ptr_3 = v_3 as *const V as *mut V;
+
+                if ptr_1 == ptr_2 || ptr_2 == ptr_3 || ptr_1 == ptr_3 {
                     None
                 } else {
-                    unsafe { Some((transmute(v_1), transmute(v_2), transmute(v_3))) } 
-                        // This is safe to do because we checked that v_1, v_2 and v_3 don't alias,
+                    unsafe { Some((transmute(ptr_1), transmute(ptr_2), transmute(ptr_3))) } 
+                        // This is safe to do because we checked that ptr_1, ptr_2 and ptr_3 don't alias,
                         // and this function consumed a &mut self, which locks the HashMap so that
                         // no further aliasing references will be created during the lifetime of these
                         // references.
@@ -305,31 +309,30 @@ impl<K: Ord, V> BTreeMapMultiMut for BTreeMap<K, V> {
         }
     }
 
-    #[allow(mutable_transmutes)]
     fn triple_mut<Q: ?Sized>(&mut self, k_1: &Q, k_2: &Q, k_3: &Q) -> (&mut V, &mut V, &mut V)
         where K: Borrow<Q>, Q: Ord
     {
+        let ptr_1 = &self[k_1] as *const V as *mut V;
+        let ptr_2 = &self[k_2] as *const V as *mut V;
+        let ptr_3 = &self[k_3] as *const V as *mut V;
 
-        let v_1 = &self[k_1];
-        let v_2 = &self[k_2];
-        let v_3 = &self[k_3];
-        if ref_eq(v_1, v_2) || ref_eq(v_2, v_3) || ref_eq(v_1, v_3) {
+        if ptr_1 == ptr_2 || ptr_2 == ptr_3 || ptr_1 == ptr_3 {
             panic!("The keys pointed to the same value! Only non-overlapping values can be handled.")
         } else {
-            unsafe { (transmute(v_1), transmute(v_2), transmute(v_3)) }
-                // This is safe to do because we checked that v_1, v_2 and v_3 don't alias,
+            unsafe { (transmute(ptr_1), transmute(ptr_2), transmute(ptr_3)) }
+                // This is safe to do because we checked that ptr_1, ptr_2 and ptr_3 don't alias,
                 // and this function consumed a &mut self, which locks the HashMap so that
                 // no further aliasing references will be created during the lifetime of these
                 // references.
         }
     }
 
-    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*const V]) -> BTreeMapMutWrapper<K, V>
+    fn multi_mut<'a>(&'a mut self, buffer: &'a mut [*mut V]) -> BTreeMapMutWrapper<K, V>
     {
         BTreeMapMutWrapper { used: 0, map: self, buffer: buffer }
     }
 
-    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, keys: &'a [&'a Q], buffer: &'a mut [*const V]) -> BTreeMapMultiMutIter<Q, K, V>
+    fn iter_multi_mut<'a, Q: ?Sized>(&'a mut self, keys: &'a [&'a Q], buffer: &'a mut [*mut V]) -> BTreeMapMultiMutIter<Q, K, V>
         where K: Borrow<Q>, Q: Ord
     {
         BTreeMapMultiMutIter { mut_wrapper: self.multi_mut(buffer), keys: keys.into_iter() }
@@ -342,14 +345,13 @@ pub struct BTreeMapMutWrapper<'a, K: 'a, V: 'a>
 {
     used: usize,
     map: &'a mut BTreeMap<K, V>,
-    buffer: &'a mut [*const V],
+    buffer: &'a mut [*mut V],
 }
 
 impl<'a, K, V> BTreeMapMutWrapper<'a, K, V>
         where K: Ord
 {
 
-    #[allow(mutable_transmutes)]
     pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&'a mut V>
         where K: Borrow<Q>, Q: Ord
     {
@@ -363,8 +365,8 @@ impl<'a, K, V> BTreeMapMutWrapper<'a, K, V>
                     // compiler jumps to conclusions based of mere *existence* of &V, we want
                     // to have it exist only inside an unsafe block, to signal that the type
                     // system invariants may be temporarily broken.
-            let v = if let Some(v) = self.map.get(k) { v } else { return None };
-            let ptr = v as *const V;
+            let ptr = if let Some(v) = self.map.get(k) { v as *const V as *mut V } else { return None };
+
             for old_ptr in &self.buffer[0..self.used] {
                 if ptr == *old_ptr {
                     panic!("No aliased references allowed! This key has been already used.");
@@ -373,7 +375,7 @@ impl<'a, K, V> BTreeMapMutWrapper<'a, K, V>
             self.buffer[self.used] = ptr;
             self.used += 1;
     
-            Some(transmute(v))
+            Some(transmute(ptr))
         }
     }
 
@@ -398,7 +400,6 @@ impl<'a, Q: ?Sized, K, V> Iterator for BTreeMapMultiMutIter<'a, Q, K, V>
 {
     type Item = &'a mut V;
 
-    #[allow(mutable_transmutes)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.mut_wrapper.used == self.mut_wrapper.buffer.len() { return None };
         match self.keys.next() {
@@ -418,6 +419,7 @@ mod tests_hash {
 
     use std::collections::HashMap;
     use HashMapMultiMut;
+    use std::ptr::null_mut;
 
     fn populate_hashmap() -> HashMap<String, String> {
         let mut map = HashMap::new();
@@ -591,9 +593,7 @@ mod tests_hash {
     fn test_multi_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let one = wrapper.get_mut("key_one").unwrap();
@@ -617,9 +617,7 @@ mod tests_hash {
     fn test_multi_ref_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let one = wrapper.mut_ref("key_one");
@@ -644,9 +642,7 @@ mod tests_hash {
     fn test_multi_over_capacity() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let _one = wrapper.get_mut("key_one").unwrap();
@@ -660,9 +656,7 @@ mod tests_hash {
     fn test_multi_same_key() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let _one = wrapper.get_mut("key_one").unwrap();
@@ -674,9 +668,7 @@ mod tests_hash {
     fn test_multi_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         assert_eq!(wrapper.get_mut("key_hundred"), None);
@@ -687,9 +679,7 @@ mod tests_hash {
     fn test_multi_ref_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         wrapper.mut_ref("key_hundred");
@@ -699,9 +689,7 @@ mod tests_hash {
     fn test_multi_iter_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_three"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -726,9 +714,7 @@ mod tests_hash {
     fn test_multi_iter_over_capacity() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_three"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -744,9 +730,7 @@ mod tests_hash {
     fn test_multi_iter_same_key() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_one"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -760,9 +744,7 @@ mod tests_hash {
     fn test_multi_iter_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_hundred"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -779,6 +761,7 @@ mod tests_btree {
 
     use std::collections::BTreeMap;
     use BTreeMapMultiMut;
+    use std::ptr::null_mut;
 
     fn populate_hashmap() -> BTreeMap<String, String> {
         let mut map = BTreeMap::new();
@@ -952,9 +935,7 @@ mod tests_btree {
     fn test_multi_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let one = wrapper.get_mut("key_one").unwrap();
@@ -978,9 +959,7 @@ mod tests_btree {
     fn test_multi_ref_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let one = wrapper.mut_ref("key_one");
@@ -1005,9 +984,7 @@ mod tests_btree {
     fn test_multi_over_capacity() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let _one = wrapper.get_mut("key_one").unwrap();
@@ -1021,9 +998,7 @@ mod tests_btree {
     fn test_multi_same_key() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         let _one = wrapper.get_mut("key_one").unwrap();
@@ -1035,9 +1010,7 @@ mod tests_btree {
     fn test_multi_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         assert_eq!(wrapper.get_mut("key_hundred"), None);
@@ -1048,9 +1021,7 @@ mod tests_btree {
     fn test_multi_ref_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let mut wrapper = map.multi_mut(&mut buffer);
         
         wrapper.mut_ref("key_hundred");
@@ -1060,9 +1031,7 @@ mod tests_btree {
     fn test_multi_iter_success() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_three"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -1087,9 +1056,7 @@ mod tests_btree {
     fn test_multi_iter_over_capacity() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_three"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -1105,9 +1072,7 @@ mod tests_btree {
     fn test_multi_iter_same_key() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_one", "key_two", "key_one"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         
@@ -1121,9 +1086,7 @@ mod tests_btree {
     fn test_multi_iter_nonexistent() {
         let mut map = populate_hashmap();
 
-        use std::ptr::null;
-
-        let mut buffer = [null(); 3];
+        let mut buffer = [null_mut(); 3];
         let keys = ["key_hundred"];
         let mut wrapper = map.iter_multi_mut(&keys, &mut buffer);
         

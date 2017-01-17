@@ -1,6 +1,6 @@
 [package]
 name = "multi_mut"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Pyry Kontio <pyry.kontio@drasa.eu>"]
 description = "Methods on HashMap and BTreeMap for safely getting multiple mutable references to the contained values."
 license = "MIT"

@@ -5,6 +5,8 @@ Runtime checks are done to prevent mutable aliasing.
 
 ### Disclaimer
 
+**Note: As of the version 0.1.5, all transmutes of mutable references are removed. The funny business is now done with raw pointers.**
+
 This crate performs some black magic behind the curtains (mutable transmutes). Whether this is safe to do or not depends on the Rust memory model, and
 the particulars of that are not set in stone yet. **No mutable access is ever done through aliasing references and the uniqueness of the references is checked
 before transmuting `&V` to `&mut V`.**
