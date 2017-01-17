@@ -15,12 +15,7 @@ multi_mut = "0.1"
 Bring the extension trait to the scope in your code:
 ```
 extern crate multi_mut;
-use multi_mut::HashMapMultiMut;
-```
-or
-```
-extern crate multi_mut;
-use multi_mut::BTreeMapMultiMut;
+use multi_mut::{HashMapMultiMut, BTreeMapMultiMut};
 ```
 
 You can now have more than one mutable reference to your `HashMap` or `BTreeMap` safely!
@@ -37,12 +32,12 @@ You can now have more than one mutable reference to your `HashMap` or `BTreeMap`
     assert_eq!(two, "value_two_edited");
 ```
 
-Quick & dirty list of available functions:
+Quick & dirty list of available methods: (They work on both `HashMap` and `BTreeMap`, provided that you have the corresponding trait in scope. )
 * `get_pair_mut(key, key)` Returns a pair of mutable references wrapped in `Option`
 * `pair_mut(key, key)` Returns a pair of mutable references and panics if the keys don't exist.
 * `get_triple_mut(key, key, key)`Returns a triple of mutable references wrapped in `Option`
 * `triple_mut(key, key, key)` Returns a triple of mutable references and panics if the keys don't exist.
-* `multi_mut()` and `iter_multi_mut()` return arbitrary number of mutable references. Check out the example below.
+* `multi_mut(buffer)` and `iter_multi_mut(keys, buffer)` return arbitrary number of mutable references. Check out the example below.
 
 To prevent mutable aliasing, all functions will panic if the input keys aren't unique. None of the functions allocate.
 `multi_mut()` and `iter_multi_mut()` perform a linear search over a buffer of pointers every time a mutable reference
