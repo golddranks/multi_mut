@@ -1,5 +1,6 @@
 # multi_mut
-Extension methods that provide a safe API for `HashMap` that helps getting multiple mutable references to the values contained in it.
+
+A bunch of extension methods on `HashMap` that provide a safe API for getting multiple mutable references to values contained in it.
 Runtime checks are done to prevent mutable aliasing.
 
 ## How to use
@@ -30,7 +31,7 @@ You can now have more than one mutable reference to your `HashMap` safely!
     assert_eq!(two, "value_two_edited");
 ```
 
-Quick'n'dirty list of available functions:
+Quick & dirty list of available functions:
 * `get_pair_mut(key, key)` Returns a pair of mutable references wrapped in `Option`
 * `pair_mut(key, key)` Returns a pair of mutable references and panics if the keys don't exist.
 * `get_triple_mut(key, key, key)`Returns a triple of mutable references wrapped in `Option`
@@ -43,12 +44,12 @@ is pulled out of the `HashMap`. In practice, this is fast enough.
 
 ### How to use `multi_mut()` and `iter_multi_mut()`
 
-`multi_mut()` and `iter_multi_mut()` need a mutable buffer to keep track of references to prevent mutable aliasing. 
-Note the line `let mut buffer = [std::ptr::null(); 3];` in the example. The size of the buffer determines how many values you can
-pull out of the `HashMap`.
+`multi_mut()` and `iter_multi_mut()` need a mutable buffer to keep track of existing references to prevent mutable aliasing. 
+See the line `let mut buffer = [std::ptr::null(); 3];` in the example. The size of the buffer determines how many values you can
+pull out of the underlying `HashMap`.
 
 The difference between the two methods is that `multi_mut()` returns a wrapper which can be used to fetch mutable references
-from `HashMap` using the `get_mut(&K) -> Option<mut V>` or `mut_ref(&K) -> &mut V` (panics if the key doesn't exist) methods,
+from `HashMap` using the `get_mut(&K) -> Option<&mut V>` or `mut_ref(&K) -> &mut V` (this panics if the key doesn't exist) methods,
 whereas `iter_multi_mut()` requires a list of keys up front, and then returns an iterator that spews out mutable references.
 
 An example of `multi_mut()`:
